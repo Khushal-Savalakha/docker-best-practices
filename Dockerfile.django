@@ -1,0 +1,37 @@
+###########################
+# Stage 1: Build Stage
+###########################
+FROM python:3.10-alpine AS builder
+
+RUN apk add --no-cache \
+    build-base \
+    mariadb-dev \
+    musl-dev \
+    nano \
+    pkgconfig
+
+COPY requirements.txt .
+
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+###########################
+# Stage 2: Final Stage
+###########################
+FROM python:3.10-alpine AS main
+
+WORKDIR /app
+
+RUN apk add --no-cache mariadb-connector-c
+
+COPY --from=builder /root/.local /root/.local
+
+ENV PATH="/root/.local/bin:$PATH"
+
+COPY . .
+
+RUN rm -rf staticfiles/* \
+    && python manage.py collectstatic --noinput
+
+EXPOSE 8000
+
+CMD ["sh", "-c", "python manage.py migrate && gunicorn -w 4 core.wsgi:application --bind 0.0.0.0:8000 --max-requests 1200 --max-requests-jitter 1000"]
