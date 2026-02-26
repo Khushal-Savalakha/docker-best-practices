@@ -1,0 +1,37 @@
+############################################
+# Step 1: Build stage
+############################################
+FROM node:20 AS builder
+
+WORKDIR /app
+
+# Copy only required files first to leverage Docker caching
+COPY package.json yarn.lock ./
+
+# Install dependencies
+RUN yarn install --frozen-lockfile
+
+# Copy the rest of the app
+COPY . .
+
+# Build the app (requires output: "standalone" in next.config.ts)
+RUN yarn build
+
+############################################
+# Step 2: Production stage (standalone mode)
+############################################
+FROM node:20-slim AS production
+
+WORKDIR /app
+
+# Set environment to production
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Copy the standalone build and static files
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+# Start Next.js standalone server
+CMD ["node", "server.js"]
